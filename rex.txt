@@ -1,0 +1,852 @@
+/*******************************************************************************
+Visual SourceSafe Version Tracking Information - DO NOT MANUALLY EDIT!
+COPYRIGHT 1999-2000 SimCorp Swallow Business Systems Ltd, CONFIDENTIAL
+Interface Definition:
+$Logfile: /IT2 Standard Interfaces/Customer Interfaces/Consolis/FR349 NL report parser.psr $
+********************************************************************************
+Latest Version Information:
+$Revision: 1 $
+$Author: Els $
+$Date: 17/02/09 10:46 $
+Refer to Visual SourceSafe for details of interface revisions. 
+*******************************************************************************/
+/*******************************************************************************
+Description:
+Parser to process the output from an IT/2 Nominal Ledger postings report and
+reformat the information so it can be imported into the XXXX accounting package.
+********************************************************************************
+This parser expects as an input file an IT/2 report with the following fields,
+in the following order:
+
+  NL level report.
+  Fields required (IN THIS ORDER):
+
+    NL posting reference         6500
+    Event date                   6509
+    Original event date          9770
+    Transaction reference        6533/2
+    Posted date				     6508
+    GL account name              6526
+    Original currency            6518/1
+    Posted amount                6504
+    Debit/credit flag            6501/1
+    Ledger account currency code 6524
+    Acc. base amount             6558
+    Overall FX rate (Calc.)      6555
+    Event ID                     6515
+    Template Mapping Description 4037
+    User def field               9758/1
+    Funds type code              9652
+    Journal reference            6532
+    Journal entry amount ID      6505
+    Journal entry comment        6565
+    Trans. User Ref              6584
+
+
+(Hidden fields can also be included with no effect to the parser)
+
+  There should be NO TOTALS / SUMMARIES / COUNTS for any of these.
+  Sorting is unimportant, but there should be NO SUBTITLES.
+
+  Output:
+    Send To: CSV
+    Form:    Listing
+    Header:  None
+
+*******************************************************************************/
+
+/*----- Set the numeric precision -----*/
+NUMERIC DIGITS(31)
+
+
+
+/* DEFINE PASSES TDBK followed by - O for misc ops and F for financial*/
+FullPass.1 =  'CAP-O'
+FullPass.2 =  'BNP3-F'
+FullPass.3 =  'HSBC-F'
+FullPass.4 =  'ING-F'
+FullPass.5 =  'INT-O'
+FullPass.6 =  'JPM-F'
+FullPass.7 =  'JPM2-F'
+FullPass.8 =  'JPM3-F'
+FullPass.9 =  'JPM4-F'
+FullPass.10 =  'JPM6-F'
+FullPass.11 =  'JPM8-F'
+FullPass.12 =  'JPM9-F'
+FullPass.13 = 'OPD-O'
+FullPass.14 =  'REV-O'
+FullPass.15 =  'BCEE-F'
+FullPass.16 = 'xxx-x'
+FullPass.17 = 'TP-O'
+FullPass.18 =  'BNP5-F'
+FullPass.19 =  'BCE2-F'
+FullPass.20 =  'JPM7-F'
+NumPasses = 20
+
+j = 1 
+Do while j <= NumPasses +1
+Pass.j = left(FullPass.j,length(FullPass.j)-2)
+FileType.j = right(FullPass.j,1)
+j = j +1
+end
+
+
+
+
+
+
+/*----- Get the input filename -----*/
+PARSE ARG BAHandle Filename
+
+/*----- Sort out and validate filenames -----*/
+CALL SortOutFiles
+
+/*----- Message to user -----*/
+CALL BARexxWriteTextToScreen BAHandle, ''
+CALL BARexxWriteTextToScreen BAHandle, 'Reformatting File...'
+CALL BARexxWriteTextToScreen BAHandle, ''
+
+Separator = ','
+RowNumber = 0
+HeaderNo = 1
+Header = 'N'
+TDBK=''
+LastJournal=''
+TDOCNO = 0
+JournalLineNo =1
+
+/*FIRST PASS*/
+
+/*----- Writing out the header -----*/
+/*  strLedgerLine = 'TDBK,TFYEAR,TYEAR,TMONTH,TDOCNO,TDOCLINE,TTYPELINE,TDOCDATE,TACTTYPE,TACCOUNT,TCURAMN,TCURRATE,TCURRENCY,TAMOUNT,TDC,TREM,COST_DEPART'
+    ErrLines = LINEOUT(FileoutLines,strLedgerLine)*/
+
+/*----- Writing out the header -----*/
+ /* strHeaderLine = 'TDBK,TFYEAR,TYEAR,TMONTH,TDOCNO,TTYPELINE'
+    ErrHdr = LINEOUT(FileoutHdr,strHeaderLine)*/
+
+/*FIRST PASS*/
+
+ThisPass = 1
+
+TDOCLINE = 0
+
+/*----- Read in and process the postings information -----*/
+LastHeaderRow = ''
+DO WHILE (LINES(Filename) > 0)
+  Line = LINEIN(Filename)
+ 
+  IF LENGTH(SPACE(Line)) \= 0 THEN
+    DO
+  /*	TDOCNO = Trunc(HeaderNo)*/
+    CALL SplitLine Line
+  
+    
+    CALL ConstructRow
+    
+      IF PostedAmount \=0 & AccountAmount\= 0 then
+  	DO
+    
+        if JournalLineNo = 2 & TDBK = Pass.ThisPass & FileType.ThisPass = 'O'  then
+    	DO
+		WriteOkHdr = lineout(FileoutHdr, HeaderRow)
+        WriteOkLines = lineout(FileoutLines, Line1LedgerRow)
+    	END 
+    	
+
+    	
+    
+    
+      
+  if JournalLineNo \= 1 & TDBK = Pass.ThisPass & FileType.ThisPass = 'O' then
+    DO
+			if JournalLineNo = 2 then 
+			do
+			if TDOCNO = 0
+			then
+			WriteOkHdr = lineout(FileoutHdr, TDBK||','||TFYEAR||','||TYEAR||','||TMONTH||',1,'||TTYPELINE)
+			else
+			WriteOkHdr = lineout(FileoutHdr, HeaderRow)
+			end
+        WriteOkLines = lineout(FileoutLines, LedgerRow)
+
+    END  
+    
+        
+    if JournalLineNo \= 1 & TDBK = Pass.ThisPass & FileType.ThisPass = 'F' then
+    DO
+			if JournalLineNo = 2  then
+			do
+			if TDOCNO = 0
+			then
+			WriteOkHdr = lineout(FinFileoutHdr, TDBK||','||TFYEAR||','||TYEAR||','||TMONTH||',1,'||TTYPELINE)
+			else
+			WriteOkHdr = lineout(FinFileoutHdr, HeaderRow)
+   			 end
+        WriteOkLines = lineout(FinFileoutLines, LedgerRow)
+                      
+     
+    END  
+        
+        
+        
+  /*  if LastHeaderRow <> HeaderRow & TDBK = Pass.ThisPass then
+       WriteOkHdr = lineout(FileoutHdr, HeaderRow)
+    LastHeaderRow = HeaderRow
+    RowNumber = RowNumber + 1
+    HeaderNo = (RowNumber/2) + 1*/
+ 	 END
+ 	END
+  END
+
+
+
+
+
+
+
+/*----- Close the input & output files -----*/
+ReturnValue = STREAM(Filename,   'c', 'close')
+/*ReturnValueLines = STREAM(FileoutLines,    'c', 'close')*/
+ReturnValueHdr = STREAM(FileoutHdr,    'c', 'close')
+
+/* END OF FIRST PASS */
+
+ThisPass = 2 
+JournalLineNo =1
+
+DO WHILE ThisPass <= NumPasses
+TDOCLINE = 0
+Call FurtherPass
+  ThisPass     = ThisPass + 1
+  JournalLineNo =1
+  JournalReference =''
+  END
+
+
+
+ReturnValueLines = STREAM(FileoutLines,    'c', 'close')
+/*----- Output creation complete comment -----*/
+CALL BARexxWriteTextToScreen BAHandle, 'Reformatting Completed OK.'
+CALL BARexxWriteTextToScreen BAHandle, ''
+
+/*----- Archive files -----*/
+CALL ArchiveFiles
+
+EXIT
+
+/* Write out Header Line */
+IF DOSDIR(Filename) <> '' THEN
+  CALL WriteHeaderLine
+
+DO WHILE Header = 'N' & (Lines(Filename) > 0 )
+	Line = LINEIN(Filename)
+	
+	IF LEFT(Line,10) = 'Event Date' THEN
+		Header = 'Y'
+	
+END
+/*----------------------------------------------------------------------------*/
+/* SplitLine:                                                                 */
+/*                                                                            */
+/* Splits the input line into its constituent comma-delimited fields,         */
+/* populating elements of the stem variable 'Field.'                          */
+/*----------------------------------------------------------------------------*/
+SplitLine:
+
+Line      = ARG(1)
+Field.    = ''
+Separator = ','
+
+/*----- Split the input line into its constituent fields -----*/
+
+PARSE VALUE Line WITH EventDate             (Separator),
+                      OriginalEventDate     (Separator), 
+                      TransactionReference 	(Separator), 
+                      PostedDate        	(Separator), 
+                      GLAccount         	(Separator), 
+                      OriginalCur           (Separator), 
+                      PostedAmount          (Separator), 
+                      DebitCreditFlag     	(Separator), 
+                      AccountCurrency      	(Separator),
+                      AccountAmount        	(Separator), 
+                      OverallRate        	(Separator),
+                      EventID        		(Separator),
+                      ThisMappingDescription   	(Separator),    
+                      ProjectCode        	(Separator),
+                      FundsType        	    (Separator),      
+                      JournalReference   	(Separator),   
+                      AmountID        	    (Separator),      
+                      Comment            	(Separator),
+                      TransactionUserRef    (Separator), 
+/* Interface Specification
+TDBK        	Bob daybook
+TFYEAR        	Bob fiscal year (Identical to year)
+TYEAR        	Year
+TMONTH    	Month
+TDOCNO    	Document number (Your own number)
+TDOCLINE    	Sequential value begining at 0 for each new document number
+TTYPELINE    	Always B
+TDOCDATE    	Posting date
+TACTTYPE    	Always A
+TACCOUNT    	General account
+TCURAMN    	Amount in currency (0 if euro)
+TCURRATE    	Currency rate (0 if euro)
+TCURRENCY    	Currency (Empty if euro)
+TAMOUNT    	Amount in euro
+TDC        	D (Debit) or C (Credit)
+TREM        	Remark */
+
+If ThisMappingDescription ='' & LastJournal = JournalReference then
+MappingDescription =LastMappingDescription
+else 
+DO
+LastMappingDescription = ThisMappingDescription
+MappingDescription = ThisMappingDescription
+END
+
+
+
+/*----- Calculate TDBK -----*/
+IF LastJournal = JournalReference THEN 
+DO
+JournalLineNo = JournalLineNo + 1
+ 
+END
+
+If LastJournal \= JournalReference THEN 
+DO
+OutputType = 'O'
+  JournalLineNo = 1
+ LastJournal = JournalReference
+ TDOCLINE = -1
+ END
+
+
+
+
+IF OutputType ='O'  THEN
+DO
+SELECT
+   WHEN GLAccount = '5131000024' & PostedAmount \= 0 THEN TDBK = 'BNP5'
+   WHEN GLAccount = '5131000011' & PostedAmount \= 0 THEN TDBK = 'HSBC'
+   WHEN GLAccount = '5131000008' & PostedAmount \= 0 THEN TDBK = 'ING'
+   WHEN GLAccount = '5131000013' & PostedAmount \= 0 THEN TDBK = 'JPM'
+   WHEN GLAccount = '5131000012' & PostedAmount \= 0 THEN TDBK = 'JPM2'
+   WHEN GLAccount = '5131000014' & PostedAmount \= 0 THEN TDBK = 'JPM3'
+   WHEN GLAccount = '5131000015' & PostedAmount \= 0 THEN TDBK = 'JPM4'
+   WHEN GLAccount = '5131000016' & PostedAmount \= 0 THEN TDBK = 'JPM6'
+   WHEN GLAccount = '5131000017' & PostedAmount \= 0 THEN TDBK = 'JPM7'
+   WHEN GLAccount = '5131000018' & PostedAmount \= 0 THEN TDBK = 'JPM8'
+   WHEN GLAccount = '5131000019' & PostedAmount \= 0 THEN TDBK = 'JPM9'
+   WHEN GLAccount = '5131000025' & PostedAmount \= 0 THEN TDBK = 'BCEE'
+   WHEN GLAccount = '5131000022' & PostedAmount \= 0 THEN TDBK = 'BNP3'
+   WHEN GLAccount = '5131000027' & PostedAmount \= 0 THEN TDBK = 'BCE2'
+   WHEN EventID = '31' & left(TransactionReference,3) \= 'IMM' THEN TDBK = 'INT'
+   WHEN EventID = '33' THEN TDBK = 'CAP'
+   WHEN SUBSTR(MappingDescription,1,6) = 'FX G/L' THEN TDBK = 'REV'
+   WHEN AmountID ='468' THEN TDBK = 'INT'
+   WHEN AmountID ='221' THEN TDBK = 'OPD'
+   WHEN Left(Comment,23) = 'TP Margin Interest ADIA' then TDBK ='TP'
+   OTHERWISE TDBK = 'OPD'
+ END
+ 
+ 
+ If left(GLAccount,4) = '5131' then OutputType = 'F' 
+ 
+
+ END
+
+
+
+
+TFYEAR = SUBSTR(EventDate,7,4)
+TYEAR = SUBSTR(EventDate,7,4)
+TMONTH = SUBSTR(EventDate,4,2)
+
+if TDBK = Pass.ThisPass then 
+DO
+TDOCLINE =TDOCLINE + 1
+If TDBK \= LastTDBK then TDOCNO =  0 
+LastTDBK = TDBK
+ if TDOCLINE  = 0 then TDOCNO = TDOCNO + 1
+END
+
+TTYPELINE = 'B'
+TDOCDATE = OriginalEventDate
+TACTTYPE = 'A'
+TACCOUNT = GLAccount
+
+/*----- Calculate TCURAMN -----*/
+If OriginalCur = 'EUR' THEN
+	TCURAMN = '0.00'
+Else
+	TCURAMN = PostedAmount
+	
+If FileType.ThisPass = "O" then
+TCURAMN = abs(TCURAMN)
+else
+TCURAMN = (TCURAMN) *-1
+	
+
+/*----- Calculate TCURRATE -----*/
+If OriginalCur = 'EUR'|OverallRate = 0 THEN
+	TCURRATE = '0.00'
+Else
+	TCURRATE = trunc((1/OverallRate) + 0.0000000005,9)
+
+/*----- Calculate TCURRENCY -----*/
+If OriginalCur = 'EUR' THEN
+	TCURRENCY = ''
+Else
+	TCURRENCY = OriginalCur
+
+TAMOUNT = AccountAmount
+If FileType.ThisPass = "O" then
+TAMOUNT = abs(TAMOUNT)
+else
+TAMOUNT = (TAMOUNT) *-1
+
+
+
+
+TDC = DebitCreditFlag
+If FileType.ThisPass = "F" then TDC = ''
+/*----- Calculate TREM -----*/
+If Left(Comment,23) = 'TP Margin Interest ADIA' THEN
+	TREM = Comment
+Else if ProjectCode = '' THEN
+	TREM = TransactionReference||' '||MappingDescription||' '||TransactionUserRef
+Else
+	TREM = TransactionReference||' '||MappingDescription||' '||ProjectCode
+
+/*----- Calculate CostCentre -----*/
+If (FundsType = 'IN')|(FundsType = 'MS')|(FundsType = 'MT')|(FundsType = 'MF')|(FundsType = 'RE')|(FundsType = 'CN')|(FundsType = 'R1') THEN
+	COST_DEPART = 'CC3000'
+Else if (MappingDescription = 'BCEE Cr Card RCS Expense') THEN
+	COST_DEPART = 'CC8000'
+Else if (FundsType = 'MR') THEN
+	COST_DEPART = 'CC1000'
+Else
+	COST_DEPART = ''
+
+If COST_DEPART = '' then
+	COST_PROJECTS =''
+else	
+	COST_PROJECTS ='NO_CCP'	
+	
+	
+
+RETURN
+
+/*----------------------------------------------------------------------------*/
+/* ConstructRow:                                                              */
+/*                                                                            */
+/* Constructs a row to be exported to the general Ledger                      */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+ConstructRow: 
+
+LedgerRow       = TDBK
+LedgerField.1   = TFYEAR
+LedgerField.2   = TYEAR
+LedgerField.3   = TMONTH						                    
+LedgerField.4   = TDOCNO						  	                    
+LedgerField.5   = TDOCLINE
+LedgerField.6   = TTYPELINE	
+LedgerField.7   = TDOCDATE	
+LedgerField.8   = TACTTYPE	
+LedgerField.9   = TACCOUNT	
+LedgerField.10   = TCURAMN	
+LedgerField.11  = TCURRATE	
+LedgerField.12  = TCURRENCY	
+LedgerField.13  = TAMOUNT	
+LedgerField.14  = TDC
+LedgerField.15  = TREM
+LedgerField.16  = COST_DEPART 
+LedgerField.17  = COST_PROJECTS 
+
+if JournalLineNo = 1 then
+DO
+Line1LedgerRow        =  LedgerRow       
+Line1LedgerField.1    =  LedgerField.1   
+Line1LedgerField.2    =  LedgerField.2   
+Line1LedgerField.3    =  LedgerField.3   
+Line1LedgerField.4    =  LedgerField.4   
+Line1LedgerField.5    =  LedgerField.5   
+Line1LedgerField.6    =  LedgerField.6   
+Line1LedgerField.7    =  LedgerField.7   
+Line1LedgerField.8    =  LedgerField.8   
+Line1LedgerField.9    =  LedgerField.9   
+Line1LedgerField.10   =  LedgerField.10   
+Line1LedgerField.11   =  LedgerField.11  
+Line1LedgerField.12   =  LedgerField.12  
+Line1LedgerField.13   =  LedgerField.13  
+Line1LedgerField.14   =  LedgerField.14  
+Line1LedgerField.15   =  LedgerField.15  
+Line1LedgerField.16   =  LedgerField.16  
+Line1LedgerField.17   =  LedgerField.17 
+end
+
+if JournalLineNo \= 1  & Line1LedgerField.10 = 0  & Line1LedgerField.13 = 0 Then LedgerField.5 = LedgerField.5-1
+
+
+
+if JournalLineNo = 2 then
+DO
+Line1LedgerField.15   =  LedgerField.15 
+Index = 1
+
+Line1LedgerRow = Line1LedgerRow||','
+
+DO WHILE Index <= 17
+  Line1LedgerRow = Line1LedgerRow||Line1LedgerField.Index||','
+  Index     = Index + 1
+  END
+END
+
+ 
+ 		                  
+if JournalLineNo \= 1 then
+DO
+Index = 1
+
+LedgerRow = LedgerRow||','
+
+DO WHILE Index <= 17
+  LedgerRow = LedgerRow||LedgerField.Index||','
+  Index     = Index + 1
+  END
+END
+
+  
+HeaderRow = TDBK||','||TFYEAR||','||TYEAR||','||TMONTH||','||TDOCNO||','||TTYPELINE
+
+RETURN
+
+/*WriteHeaderLine*/
+WriteHeaderLine:
+
+  strHeaderLine = 'TDBK,TFYEAR,TYEAR,TMONTH,TDOCNO,TDOCLINE,TTYPELINE,TDOCDATE,TACTTYPE,TACCOUNT,TCURAMN,TCURRATE,TCURRENCY,TAMOUNT,TDC,TREM,COST_DEPART'
+    Err = LINEOUT(OutputFile,strHeaderLine)
+
+Return
+
+/*----------------------------------------------------------------------------*/
+/* GetDateTime:                                                               */
+/*                                                                            */
+/* Gets the current system date and time and returns a string in the format   */
+/* DDMMYYYY_HHMM                                                              */
+/*----------------------------------------------------------------------------*/
+GetDateTime:
+
+DateStamp     = DATE(S)
+TimeStamp     = SPACE(TRANSLATE(SUBSTR(TIME(N), 1, 5), ' ', ':'), 0)
+DateTimeStamp = DateStamp||'_'||TimeStamp||SPACE(TRANSLATE(TIME(N),' ',':'),0)
+
+RETURN DateTimeStamp
+
+/*----------------------------------------------------------------------------*/
+/* SortOutFiles:                                                              */
+/*                                                                            */
+/* Sorts out filenames and opens files                                        */
+/*----------------------------------------------------------------------------*/
+SortOutFiles:
+
+/*----- Get the path for the output file -----*/
+Filepath = DELSTR(Filename, LASTPOS('\', Filename) + 1)     /*----- This includes the final '\' -----*/
+
+/*----- Set output filename -----*/
+FDate     = SPACE(TRANSLATE(DATE(E),'','/'),0)
+
+FileDate = '20'||Right(FDate,2)||SUBSTR(FDate,3,2)||left(FDate,2)
+
+
+FileoutHdr    = 'OdHeader_'||FileDate||'.CSV'
+FileoutNopath = 'OdLines_'||FileDate||'.CSV'
+
+FinFileoutHdr    = 'FinHeader_'||FileDate||'.CSV'
+FinFileoutNopath = 'FinLines_'||FileDate||'.CSV'
+
+
+
+FileoutLines  = Filepath||FileoutNopath
+FileoutHdr    = Filepath||FileoutHdr
+
+FinFileoutLines  = Filepath||FinFileoutNopath
+FinFileoutHdr    = Filepath||FinFileoutHdr
+
+
+
+
+
+
+err           = dosdel(fileoutLines)
+err           = dosdel(fileoutHdr)
+err           = dosdel(finfileoutLines)
+err           = dosdel(finfileoutHdr)
+
+/*----- Check that there is not an existing output file at this location -----*/
+IF (DOSDIR(FileoutLines) \= '') | (DOSDIR(FinFileoutLines) \= '') THEN
+  DO
+  IF (DOSDIR(FileoutLines) \= '') then CALL BARexxWriteTextToScreen BAHandle, 'Old file '||FileoutLines||' Needs To Be Removed Before New File Can Be Created. Reformatting Will Be Cancelled.'
+  IF (DOSDIR(FinFileoutLines) \= '') then CALL BARexxWriteTextToScreen BAHandle, 'Old file '||FinFileoutLines||' Needs To Be Removed Before New File Can Be Created. Reformatting Will Be Cancelled.'
+  CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
+  CALL BARexxWriteTextToScreen BAHandle, ''
+
+  /*----- Exit with error -----*/
+  RESULT = 6039
+  SIGNAL EndError
+  END
+
+IF (DOSDIR(FileoutHdr) \= '') THEN
+  DO
+  CALL BARexxWriteTextToScreen BAHandle, 'Old file '||FileoutHdr||' Needs To Be Removed Before New File Can Be Created. Reformatting Will Be Cancelled.'
+  CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
+  CALL BARexxWriteTextToScreen BAHandle, ''
+
+  /*----- Exit with error -----*/
+  RESULT = 6039
+  SIGNAL EndError
+  END
+
+/*----- Initialize variables -----*/
+ArchiveDirectory = FileSpec('D',Filename)||FileSpec('P',Filename)||'Archive\'
+
+RecordCounter = 0
+
+IF (DOSDIR(STRIP(ArchiveDirectory, T, '\'), 'N', 'D') = '') THEN 
+  DO
+  DirOk = DOSMKDIR(ArchiveDirectory)
+  IF (DirOk = 0) THEN
+    DO
+    CALL BARexxWriteTextToScreen BAHandle, 'Error: archive directory could not be created'
+    RETURN 1
+    END
+  END
+
+/*----- Check that file contains some data -----*/
+ReturnValue = STREAM(Filename, 'c', 'query size')
+IF (ReturnValue < 5) THEN
+  DO
+  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, 'Input file contains no data. Reformatting Will Be Cancelled.'
+  CALL BARexxWriteTextToScreen BAHandle, 'There are no postings to be processed.'
+  CALL BARexxWriteTextToScreen BAHandle, ''
+  
+  CALL ArchiveFiles
+
+  /*----- Exit with error -----*/
+  RESULT = 0
+  SIGNAL EndError
+  END
+
+/*----- Validate the input file name -----*/
+ReturnValue = STREAM(Filename, 'c', 'open')
+IF (ReturnValue \= 'READY:') THEN
+  DO
+  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, 'Error In Opening Input File. Reformatting Will Be Cancelled.'
+  CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
+  CALL BARexxWriteTextToScreen BAHandle, ''
+  
+  /*----- Exit with error -----*/
+  RESULT = 6039
+  SIGNAL EndError
+  END
+
+/*----- Open the output file -----*/
+ReturnValueLines   = STREAM(FileoutLines, 'c', 'open')
+IF (ReturnValueLines \= 'READY:') THEN
+  DO
+  CALL BARexxWriteTextToScreen BAHandle, 'Error In Opening Parser Output File. Reformatting Will Be Cancelled.'
+  CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
+  CALL BARexxWriteTextToScreen BAHandle, ''
+
+  /*----- Exit with error -----*/
+  RESULT = 6039
+  SIGNAL EndError
+  END
+CALL STREAM FileoutLines, 'c', 'close'
+CALL DOSDEL FileOUtLines
+
+
+/*----- Open the output file -----*/
+ReturnValueHdr   = STREAM(FileoutHdr, 'c', 'open')
+IF (ReturnValueHdr \= 'READY:') THEN
+  DO
+  CALL BARexxWriteTextToScreen BAHandle, 'Error In Opening Parser Output File. Reformatting Will Be Cancelled.'
+  CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
+  CALL BARexxWriteTextToScreen BAHandle, ''
+
+  /*----- Exit with error -----*/
+  RESULT = 6039
+  SIGNAL EndError
+  END
+CALL STREAM FileoutHdr, 'c', 'close'
+CALL DOSDEL FileoutHdr
+
+
+RETURN
+
+/*----------------------------------------------------------------------------*/
+/* ArchiveFiles                                                               */
+/*                                                                            */
+/* Moves IT/2 report and copies output file to archive directory              */
+/*----------------------------------------------------------------------------*/
+ArchiveFiles:
+
+/*----- Move the original report file to the archive directory -----*/
+ArchError = 0
+ReportArchiveFile = ArchiveDirectory||FileoutNopath||'_'||GetDateTime()||'.IT2'
+ReturnValue = DOSCOPY(Filename, ReportArchiveFile, 'R')
+IF (ReturnValue \= 0) THEN ArchError = ArchError + 1
+
+
+/*----- Copy the file to the archive directory if it exists -----*/
+OutArchiveFile = ArchiveDirectory||FileoutNopath||'_Lines_'||GetDateTime()||'.NL'
+IF STREAM(FileoutLines, 'c', 'query exists') \= '' THEN DO
+  ReturnValueLines = DOSCOPY(FileoutLines, OutArchiveFile, 'R')
+  IF (ReturnValueLines \= 0) THEN ArchError = ArchError + 1
+  END
+
+/*----- Copy the file to the archive directory if it exists-----*/
+OutArchiveFile = ArchiveDirectory||FileoutNopath||'_Hdr_'||GetDateTime()||'.NL'
+IF STREAM(FileoutLinesHdr, 'c', 'query exists') \= '' THEN DO
+  ReturnValueHdr = DOSCOPY(FileoutLinesHdr, OutArchiveFile, 'R')
+  IF (ReturnValueHdr \= 0) THEN ArchError = ArchError + 1
+  END
+
+/*----- Output Archive comments to the service log -----*/
+CALL BARexxWriteTextToScreen BAHandle, 'Archiving Files...'
+CALL BARexxWriteTextToScreen BAHandle, ''
+IF (ArchError \= 0) THEN
+  CALL BARexxWriteTextToScreen BAHandle, ArchError||' Error(s) Archiving Files.  Manual Archive May Be Necessary.'
+ELSE
+  CALL BARexxWriteTextToScreen BAHandle, 'Archiving Completed OK.'
+CALL BARexxWriteTextToScreen BAHandle, ''
+
+RETURN 
+
+
+/*----------------------------------------------------------------------------*/
+/* FurtherPass:                                                                  */
+/*                                                                            */
+/* Routine used to pass error result back to IT2                              */
+/*----------------------------------------------------------------------------*/
+ FurtherPass:  
+ 
+ /*CALL BARexxWriteTextToScreen BAHandle, ThisPass||":"||FullPass.ThisPass||":"||Pass.ThisPass||":"||FileType.ThisPass*/
+ 
+/*----- Read in and process the postings information -----*/
+LastHeaderRow = ''
+DO WHILE (LINES(Filename) > 0)
+  Line = LINEIN(Filename)
+  
+  IF LENGTH(SPACE(Line)) \= 0 THEN
+    DO
+      CALL SplitLine Line
+    
+   
+    
+    CALL ConstructRow
+ IF PostedAmount \=0 & AccountAmount\= 0 then
+  	DO      
+        if JournalLineNo = 2 & TDBK = Pass.ThisPass & FileType.ThisPass = 'O' & (Line1LedgerField.10 \= 0 | Line1LedgerField.13 \= 0)   then
+    DO
+/*WriteOkHdr = lineout(FileoutHdr, HeaderRow)*/
+        WriteOkLines = lineout(FileoutLines, Line1LedgerRow)
+       
+    END 
+    
+    
+    if JournalLineNo \= 1 & TDBK = Pass.ThisPass & FileType.ThisPass = 'O' then
+    DO
+			if JournalLineNo = 2 then 
+			do
+			if TDOCNO = 0
+			then
+			WriteOkHdr = lineout(FileoutHdr, TDBK||','||TFYEAR||','||TYEAR||','||TMONTH||',1,'||TTYPELINE)
+			else
+			WriteOkHdr = lineout(FileoutHdr, HeaderRow)
+			end
+        WriteOkLines = lineout(FileoutLines, LedgerRow)
+
+    END  
+    
+        
+    if JournalLineNo \= 1 & TDBK = Pass.ThisPass & FileType.ThisPass = 'F' then
+    DO
+			if JournalLineNo = 2  then
+			do
+			if TDOCNO = 0
+			then
+			WriteOkHdr = lineout(FinFileoutHdr, TDBK||','||TFYEAR||','||TYEAR||','||TMONTH||',1,'||TTYPELINE)
+			else
+			WriteOkHdr = lineout(FinFileoutHdr, HeaderRow)
+   			 end
+    if LedgerField.4 \= 0 then     WriteOkLines = lineout(FinFileoutLines, LedgerRow)
+    if LedgerField.4 = 0 & LedgerField.5= 2 then 
+    
+    DO
+Index = 1
+LedgerField.4 = 1 
+LedgerField.5 = 1
+LedgerRow = TDBK||','
+
+DO WHILE Index <= 17
+  LedgerRow = LedgerRow||LedgerField.Index||','
+  Index     = Index + 1
+  END
+LedgerField.4 = 0 
+LedgerField.5 = 2
+WriteOkLines = lineout(FinFileoutLines, LedgerRow)     
+    END
+    
+    
+     
+    
+    END  
+        
+        
+        
+  /*  if LastHeaderRow <> HeaderRow & TDBK = Pass.ThisPass then
+       WriteOkHdr = lineout(FileoutHdr, HeaderRow)
+    LastHeaderRow = HeaderRow
+    RowNumber = RowNumber + 1
+    HeaderNo = (RowNumber/2) + 1*/
+    END
+    END
+  END
+
+
+
+
+
+
+
+/*----- Close the input & output files -----*/
+ReturnValue = STREAM(Filename,   'c', 'close')
+/*ReturnValueLines = STREAM(FileoutLines,    'c', 'close')*/
+/*ReturnValueHdr = STREAM(FileoutHdr,    'c', 'close')*/
+
+ 
+ 
+ 
+ 
+RETURN
+
+
+
+
+
+
+/*----------------------------------------------------------------------------*/
+/* EndError:                                                                  */
+/*                                                                            */
+/* Routine used to pass error result back to IT2                              */
+/*----------------------------------------------------------------------------*/
+EndError:
+
+EXIT RESULT
