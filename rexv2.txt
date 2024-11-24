@@ -54,7 +54,7 @@ in the following order:
     Header:  None
 
 *******************************************************************************/
-
+/*-TRACE R-*/
 /*----- Set the numeric precision -----*/
 NUMERIC DIGITS(31)
 
@@ -102,9 +102,9 @@ PARSE ARG BAHandle Filename
 CALL SortOutFiles
 
 /*----- Message to user -----*/
-CALL BARexxWriteTextToScreen BAHandle, ''
+/*CALL BARexxWriteTextToScreen BAHandle, ''
 CALL BARexxWriteTextToScreen BAHandle, 'Reformatting File...'
-CALL BARexxWriteTextToScreen BAHandle, ''
+CALL BARexxWriteTextToScreen BAHandle, ''*/
 
 Separator = ','
 RowNumber = 0
@@ -160,7 +160,7 @@ DO WHILE (LINES(Filename) > 0)
       
   if JournalLineNo \= 1 & TDBK = Pass.ThisPass & FileType.ThisPass = 'O' then
     DO
-			if JournalLineNo = 2 then 
+			if JournalLineNo = 2 & TDBK <> 'CAP' then 
 			do
 			if TDOCNO = 0
 			then
@@ -227,11 +227,11 @@ Call FurtherPass
 
 ReturnValueLines = STREAM(FileoutLines,    'c', 'close')
 /*----- Output creation complete comment -----*/
-CALL BARexxWriteTextToScreen BAHandle, 'Reformatting Completed OK.'
-CALL BARexxWriteTextToScreen BAHandle, ''
+/*CALL BARexxWriteTextToScreen BAHandle, 'Reformatting Completed OK.'
+CALL BARexxWriteTextToScreen BAHandle, ''*/
 
 /*----- Archive files -----*/
-CALL ArchiveFiles
+/*CALL ArchiveFiles*/
 
 EXIT
 
@@ -431,11 +431,15 @@ Else
 	COST_DEPART = ''
 
 If COST_DEPART = '' then
+DO
 	COST_PROJECTS =''
+	COST_REVENU ='' 
+END
 else	
+DO
 	COST_PROJECTS ='NO_CCP'	
-	
-	
+	COST_REVENU ='NO_REV'	
+END	
 
 RETURN
 
@@ -466,6 +470,7 @@ LedgerField.14  = TDC
 LedgerField.15  = TREM
 LedgerField.16  = COST_DEPART 
 LedgerField.17  = COST_PROJECTS 
+LedgerField.18  = COST_REVENU
 
 if JournalLineNo = 1 then
 DO
@@ -487,6 +492,7 @@ Line1LedgerField.14   =  LedgerField.14
 Line1LedgerField.15   =  LedgerField.15  
 Line1LedgerField.16   =  LedgerField.16  
 Line1LedgerField.17   =  LedgerField.17 
+Line1LedgerField.18   =  LedgerField.18
 end
 
 if JournalLineNo \= 1  & Line1LedgerField.10 = 0  & Line1LedgerField.13 = 0 Then LedgerField.5 = LedgerField.5-1
@@ -500,7 +506,7 @@ Index = 1
 
 Line1LedgerRow = Line1LedgerRow||','
 
-DO WHILE Index <= 17
+DO WHILE Index <= 18
   Line1LedgerRow = Line1LedgerRow||Line1LedgerField.Index||','
   Index     = Index + 1
   END
@@ -514,7 +520,7 @@ Index = 1
 
 LedgerRow = LedgerRow||','
 
-DO WHILE Index <= 17
+DO WHILE Index <= 18
   LedgerRow = LedgerRow||LedgerField.Index||','
   Index     = Index + 1
   END
@@ -528,7 +534,7 @@ RETURN
 /*WriteHeaderLine*/
 WriteHeaderLine:
 
-  strHeaderLine = 'TDBK,TFYEAR,TYEAR,TMONTH,TDOCNO,TDOCLINE,TTYPELINE,TDOCDATE,TACTTYPE,TACCOUNT,TCURAMN,TCURRATE,TCURRENCY,TAMOUNT,TDC,TREM,COST_DEPART'
+  strHeaderLine = 'TDBK,TFYEAR,TYEAR,TMONTH,TDOCNO,TDOCLINE,TTYPELINE,TDOCDATE,TACTTYPE,TACCOUNT,TCURAMN,TCURRATE,TCURRENCY,TAMOUNT,TDC,TREM,COST_DEPART,COST_REVENU'
     Err = LINEOUT(OutputFile,strHeaderLine)
 
 Return
@@ -582,41 +588,41 @@ FinFileoutHdr    = Filepath||FinFileoutHdr
 
 
 
-err           = dosdel(fileoutLines)
+/*err           = dosdel(fileoutLines)
 err           = dosdel(fileoutHdr)
 err           = dosdel(finfileoutLines)
-err           = dosdel(finfileoutHdr)
+err           = dosdel(finfileoutHdr)*/
 
 /*----- Check that there is not an existing output file at this location -----*/
-IF (DOSDIR(FileoutLines) \= '') | (DOSDIR(FinFileoutLines) \= '') THEN
+/*IF (DOSDIR(FileoutLines) \= '') | (DOSDIR(FinFileoutLines) \= '') THEN
   DO
   IF (DOSDIR(FileoutLines) \= '') then CALL BARexxWriteTextToScreen BAHandle, 'Old file '||FileoutLines||' Needs To Be Removed Before New File Can Be Created. Reformatting Will Be Cancelled.'
   IF (DOSDIR(FinFileoutLines) \= '') then CALL BARexxWriteTextToScreen BAHandle, 'Old file '||FinFileoutLines||' Needs To Be Removed Before New File Can Be Created. Reformatting Will Be Cancelled.'
   CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
-  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, ''*/
 
   /*----- Exit with error -----*/
-  RESULT = 6039
+/*  RESULT = 6039
   SIGNAL EndError
-  END
+  END*/
 
-IF (DOSDIR(FileoutHdr) \= '') THEN
+/*IF (DOSDIR(FileoutHdr) \= '') THEN
   DO
   CALL BARexxWriteTextToScreen BAHandle, 'Old file '||FileoutHdr||' Needs To Be Removed Before New File Can Be Created. Reformatting Will Be Cancelled.'
   CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
-  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, ''*/
 
   /*----- Exit with error -----*/
-  RESULT = 6039
+/*  RESULT = 6039
   SIGNAL EndError
-  END
+  END*/
 
 /*----- Initialize variables -----*/
 ArchiveDirectory = FileSpec('D',Filename)||FileSpec('P',Filename)||'Archive\'
 
 RecordCounter = 0
 
-IF (DOSDIR(STRIP(ArchiveDirectory, T, '\'), 'N', 'D') = '') THEN 
+/*IF (DOSDIR(STRIP(ArchiveDirectory, T, '\'), 'N', 'D') = '') THEN 
   DO
   DirOk = DOSMKDIR(ArchiveDirectory)
   IF (DirOk = 0) THEN
@@ -624,68 +630,68 @@ IF (DOSDIR(STRIP(ArchiveDirectory, T, '\'), 'N', 'D') = '') THEN
     CALL BARexxWriteTextToScreen BAHandle, 'Error: archive directory could not be created'
     RETURN 1
     END
-  END
+  END*/
 
 /*----- Check that file contains some data -----*/
 ReturnValue = STREAM(Filename, 'c', 'query size')
-IF (ReturnValue < 5) THEN
+/*IF (ReturnValue < 5) THEN
   DO
   CALL BARexxWriteTextToScreen BAHandle, ''
   CALL BARexxWriteTextToScreen BAHandle, 'Input file contains no data. Reformatting Will Be Cancelled.'
   CALL BARexxWriteTextToScreen BAHandle, 'There are no postings to be processed.'
   CALL BARexxWriteTextToScreen BAHandle, ''
   
-  CALL ArchiveFiles
+  CALL ArchiveFiles*/
 
   /*----- Exit with error -----*/
-  RESULT = 0
+/*  RESULT = 0
   SIGNAL EndError
-  END
+  END*/
 
 /*----- Validate the input file name -----*/
 ReturnValue = STREAM(Filename, 'c', 'open')
-IF (ReturnValue \= 'READY:') THEN
+/*IF (ReturnValue \= 'READY:') THEN
   DO
   CALL BARexxWriteTextToScreen BAHandle, ''
   CALL BARexxWriteTextToScreen BAHandle, 'Error In Opening Input File. Reformatting Will Be Cancelled.'
   CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
-  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, ''*/
   
   /*----- Exit with error -----*/
-  RESULT = 6039
+/*  RESULT = 6039
   SIGNAL EndError
-  END
+  END*/
 
 /*----- Open the output file -----*/
 ReturnValueLines   = STREAM(FileoutLines, 'c', 'open')
-IF (ReturnValueLines \= 'READY:') THEN
+/*IF (ReturnValueLines \= 'READY:') THEN
   DO
   CALL BARexxWriteTextToScreen BAHandle, 'Error In Opening Parser Output File. Reformatting Will Be Cancelled.'
   CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
-  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, ''*/
 
   /*----- Exit with error -----*/
-  RESULT = 6039
+/*  RESULT = 6039
   SIGNAL EndError
-  END
+  END*/
 CALL STREAM FileoutLines, 'c', 'close'
-CALL DOSDEL FileOUtLines
+/*CALL DOSDEL FileOUtLines*/
 
 
 /*----- Open the output file -----*/
 ReturnValueHdr   = STREAM(FileoutHdr, 'c', 'open')
-IF (ReturnValueHdr \= 'READY:') THEN
+/*IF (ReturnValueHdr \= 'READY:') THEN
   DO
   CALL BARexxWriteTextToScreen BAHandle, 'Error In Opening Parser Output File. Reformatting Will Be Cancelled.'
   CALL BARexxWriteTextToScreen BAHandle, 'NO Postings Will Be Processed.'
-  CALL BARexxWriteTextToScreen BAHandle, ''
+  CALL BARexxWriteTextToScreen BAHandle, ''*/
 
   /*----- Exit with error -----*/
-  RESULT = 6039
+/*  RESULT = 6039
   SIGNAL EndError
-  END
+  END*/
 CALL STREAM FileoutHdr, 'c', 'close'
-CALL DOSDEL FileoutHdr
+/*CALL DOSDEL FileoutHdr*/
 
 
 RETURN
@@ -795,7 +801,7 @@ LedgerField.4 = 1
 LedgerField.5 = 1
 LedgerRow = TDBK||','
 
-DO WHILE Index <= 17
+DO WHILE Index <= 18
   LedgerRow = LedgerRow||LedgerField.Index||','
   Index     = Index + 1
   END
